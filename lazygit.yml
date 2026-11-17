@@ -1,0 +1,91 @@
+# Add this to your lazygit config (`lazygit --print-config-dir` shows where it
+# lives). Press I anywhere in lazygit to open the menu.
+customCommands:
+  - key: I
+    description: GitHub issues
+    commandMenu:
+      - key: p
+        description: Pick issue (assign, branch, check out, In Progress)
+        context: global
+        prompts:
+          - type: menuFromCommand
+            title: Select issue
+            key: Issue
+            command: gh issueflow issues
+            filter: '^(?P<number>\d+)\t(?P<title>.*)$'
+            valueFormat: '{{ .number }}'
+            labelFormat: '{{ printf "#%s" .number | cyan }} {{ .title }}'
+        command: gh issueflow pick {{ .Form.Issue }}
+        loadingText: Picking issue
+        output: log
+      - key: n
+        description: New issue
+        context: global
+        prompts:
+          - type: input
+            title: Issue title
+            key: Title
+        command: gh issueflow new {{ .Form.Title | quote }}
+        loadingText: Creating issue
+        output: popup
+        outputTitle: Issue created
+      - key: c
+        description: Create pull request (push, Closes #n, Needs review)
+        context: global
+        command: gh issueflow pr
+        loadingText: Creating pull request
+        output: popup
+        outputTitle: Pull request created
+      - key: s
+        description: Set status of the current branch's issue
+        context: global
+        prompts:
+          - type: menuFromCommand
+            title: Set status
+            key: Status
+            command: gh issueflow statuses
+        command: gh issueflow status {{ .Form.Status | quote }}
+        loadingText: Setting status
+        output: log
+      - key: m
+        description: Merge pull request (squash, delete branch, Done if approved)
+        context: global
+        prompts:
+          - type: confirm
+            title: Merge pull request
+            body: Squash-merge the pull request of {{ .CheckedOutBranch.Name }}, delete the branch locally and on the remote, and switch to the default branch?
+        command: gh issueflow merge
+        loadingText: Merging pull request
+        output: popup
+        outputTitle: Merged
+      - key: b
+        description: Delete branch (locally and on the remote)
+        context: global
+        prompts:
+          - type: menuFromCommand
+            title: Select branch to delete
+            key: Branch
+            command: gh issueflow branches
+          - type: confirm
+            title: Delete branch
+            body: Delete {{ .Form.Branch }} locally and on the remote, even if it isn't merged?
+        command: gh issueflow delete-branch {{ .Form.Branch | quote }}
+        loadingText: Deleting branch
+        output: log
+      - key: D
+        description: Delete issue (permanently)
+        context: global
+        prompts:
+          - type: menuFromCommand
+            title: Select issue to delete
+            key: Issue
+            command: gh issueflow issues
+            filter: '^(?P<number>\d+)\t(?P<title>.*)$'
+            valueFormat: '{{ .number }}'
+            labelFormat: '{{ printf "#%s" .number | cyan }} {{ .title }}'
+          - type: confirm
+            title: Permanently delete issue {{ printf "#%s" .Form.Issue }}?
+            body: This permanently deletes the issue with all its comments. It can't be undone; close the issue instead if you might need it again.
+        command: gh issueflow delete-issue {{ .Form.Issue }}
+        loadingText: Deleting issue
+        output: log
