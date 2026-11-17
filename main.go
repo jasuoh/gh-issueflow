@@ -5,18 +5,39 @@
 package main
 
 import (
+	_ "embed"
 	"errors"
+	"flag"
 	"fmt"
 	"os"
+	"os/exec"
+	"strconv"
 
 	"github.com/cli/go-gh/v2/pkg/api"
 	"github.com/cli/go-gh/v2/pkg/repository"
 	"github.com/jasuoh/gh-issueflow/internal/flow"
 	"github.com/jasuoh/gh-issueflow/internal/git"
 	"github.com/jasuoh/gh-issueflow/internal/github"
+	"github.com/jasuoh/gh-issueflow/internal/setup"
 )
 
+// The custom commands that drive gh-issueflow from lazygit.
+//
+//go:embed lazygit.yml
+var lazygitSnippet []byte
+
 const usage = `Usage: gh issueflow <command> [args]
+
+Setup:
+  setup [flags]        Add the GitHub issues menu to your lazygit config
+                       (a backup of the config is kept next to it)
+    --key <key>          key for the menu (default: I)
+    --replace            replace another custom command on that key
+    --project-number <n> also set issueflow.projectNumber globally
+    --project-owner <o>  also set issueflow.projectOwner globally
+    --config <path>      lazygit config file (default: the one lazygit uses)
+    --dry-run            print the new config instead of writing it
+    --remove             remove the menu again
 
 Commands:
   issues               List open issues as "<number>\t<title>"
@@ -60,6 +81,9 @@ func run(args []string) error {
 		return nil
 	}
 	command, args := args[0], args[1:]
+	if command == "setup" {
+		return runSetup(args)
+	}
 
 	wantArgs := map[string]int{
 		"issues": 0, "pick": 1, "new": 1, "pr": 0, "statuses": 0, "status": 1,
@@ -147,4 +171,94 @@ func newApp() (*flow.App, error) {
 		Cache:  flow.DefaultProjectCache(),
 		Out:    os.Stdout,
 	}, nil
+}
+
+func runSetup(args []string) error {
+	flags := flag.NewFlagSet("setup", flag.ContinueOnError)
+	key := flags.String("key", "I", "")
+	replace := flags.Bool("replace", false, "")
+	projectNumber := flags.Int("project-number", -1, "")
+	projectOwner := flags.String("project-owner", "", "")
+	configPath := flags.String("config", "", "")
+	dryRun := flags.Bool("dry-run", false, "")
+	remove := flags.Bool("remove", false, "")
+	flags.Usage = func() { fmt.Fprint(os.Stderr, usage) }
+	if err := flags.Parse(args); err != nil {
+		return err
+	}
+	if flags.NArg() > 0 {
+		return fmt.Errorf("unexpected argument '%s'", flags.Arg(0))
+	}
+
+	path := *configPath
+	if path == "" {
+		path = setup.ConfigPath()
+	}
+	current, err := os.ReadFile(path)
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+
+	var updated []byte
+	var result setup.Result
+	if *remove {
+		updated, result, err = setup.Remove(current)
+	} else {
+		updated, result, err = setup.Install(current, lazygitSnippet, *key, *replace)
+	}
+	if err != nil {
+		return err
+	}
+
+	if *dryRun {
+		fmt.Print(string(updated))
+		return nil
+	}
+
+	switch result {
+	case setup.Unchanged:
+		fmt.Printf("The menu is already up to date in %s\n", path)
+	case setup.NotFound:
+		fmt.Printf("There is no gh-issueflow menu in %s\n", path)
+	default:
+		backup, err := setup.WriteWithBackup(path, updated)
+		if err != nil {
+			return err
+		}
+		verb := map[setup.Result]string{setup.Added: "Added the menu to", setup.Updated: "Updated the menu in", setup.Removed: "Removed the menu from"}[result]
+		fmt.Printf("%s %s\n", verb, path)
+		if backup != "" {
+			fmt.Printf("The config as it was before gh-issueflow changed it is in %s\n", backup)
+		}
+	}
+
+	if *remove {
+		return nil
+	}
+	if *projectNumber >= 0 {
+		if err := setGlobalGitConfig("issueflow.projectNumber", strconv.Itoa(*projectNumber)); err != nil {
+			return err
+		}
+		fmt.Printf("Set issueflow.projectNumber to %d\n", *projectNumber)
+	}
+	if *projectOwner != "" {
+		if err := setGlobalGitConfig("issueflow.projectOwner", *projectOwner); err != nil {
+			return err
+		}
+		fmt.Printf("Set issueflow.projectOwner to %s\n", *projectOwner)
+	}
+
+	fmt.Printf("\nPress %s in lazygit to open the menu.\n", *key)
+	if *projectNumber > 0 {
+		fmt.Println("Project boards need the 'project' scope; if you haven't granted it yet, run: gh auth refresh -s project")
+	}
+	return nil
+}
+
+func setGlobalGitConfig(key string, value string) error {
+	output, err := exec.Command("git", "config", "--global", key, value).CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("git config --global %s: %s", key, output)
+	}
+	return nil
 }

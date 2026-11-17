@@ -1,5 +1,6 @@
-# Add this to your lazygit config (`lazygit --print-config-dir` shows where it
-# lives). Press I anywhere in lazygit to open the menu.
+# The lazygit custom commands that drive gh-issueflow. `gh issueflow setup`
+# adds them to your lazygit config; to do it by hand, copy them into the
+# config.yml in the directory that `lazygit --print-config-dir` shows.
 customCommands:
   - key: I
     description: GitHub issues
