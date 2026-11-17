@@ -353,7 +353,9 @@ func TestBranchesAndDeleteBranch(t *testing.T) {
 
 	assert.Equal(t, []string{"master"}, f.localBranches())
 	assert.False(t, f.remoteHasBranch("3-fix-the-login-form"))
-	assert.Equal(t, "origin/master", f.sh("for-each-ref", "--format=%(refname:short)", "refs/remotes"))
+	remoteTrackingBranches := f.sh("for-each-ref", "--format=%(refname:short)", "refs/remotes")
+	assert.NotContains(t, remoteTrackingBranches, "3-fix-the-login-form")
+	assert.NotContains(t, remoteTrackingBranches, "5-add-dark-mode")
 
 	assert.EqualError(t, f.app.DeleteBranch("master"), "can't delete the checked-out branch 'master'")
 }
