@@ -49,7 +49,7 @@ Configuration (git config, e.g. with --global):
 
 func main() {
 	if err := run(os.Args[1:]); err != nil {
-		fmt.Fprintln(os.Stderr, "gh issueflow: "+flow.TranslateError(err).Error())
+		fmt.Fprintln(os.Stderr, "gh issueflow: "+flow.SanitizeMultiline(flow.TranslateError(err).Error()))
 		os.Exit(1)
 	}
 }

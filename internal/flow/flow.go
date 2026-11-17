@@ -47,7 +47,7 @@ func (self *App) Issues() error {
 		return err
 	}
 	for _, issue := range issues {
-		self.printf("%d\t%s\n", issue.Number, issue.Title)
+		self.printf("%d\t%s\n", issue.Number, Sanitize(issue.Title))
 	}
 	return nil
 }
@@ -73,9 +73,15 @@ func (self *App) Pick(number int) error {
 	if err := self.Client.AssignIssue(issue.ID, repo.ViewerID); err != nil {
 		return err
 	}
-	branch, err := self.Client.CreateLinkedBranch(issue.ID, repo, naming.IssueBranchName(issue.Number, issue.Title))
+	requested := naming.IssueBranchName(issue.Number, issue.Title)
+	branch, err := self.Client.CreateLinkedBranch(issue.ID, repo, requested)
 	if err != nil {
 		return err
+	}
+	// The name goes into git commands, so only ever use the one we chose,
+	// which consists of letters, digits and dashes.
+	if branch != requested {
+		return fmt.Errorf("GitHub created the branch '%s' instead of '%s'; not checking it out", Sanitize(branch), requested)
 	}
 	if err := board.setStatus(self.Client, issue.ID); err != nil {
 		return err
@@ -118,7 +124,7 @@ func (self *App) New(title string) error {
 		}
 	}
 
-	self.printf("Created issue #%d: %s\n", issue.Number, issue.Url)
+	self.printf("Created issue #%d: %s\n", issue.Number, Sanitize(issue.Url))
 	return nil
 }
 
@@ -181,7 +187,7 @@ func (self *App) PullRequest() error {
 		}
 	}
 
-	self.printf("Created pull request #%d:\n%s\n", pr.Number, pr.Url)
+	self.printf("Created pull request #%d:\n%s\n", pr.Number, Sanitize(pr.Url))
 	return nil
 }
 
@@ -232,7 +238,7 @@ func (self *App) Statuses() error {
 		return err
 	}
 	for _, status := range project.StatusOptions() {
-		self.printf("%s\n", status)
+		self.printf("%s\n", Sanitize(status))
 	}
 	return nil
 }
@@ -263,7 +269,7 @@ func (self *App) SetStatus(status string) error {
 		return err
 	}
 
-	self.printf("Set status of #%d to '%s'\n", number, status)
+	self.printf("Set status of #%d to '%s'\n", number, Sanitize(status))
 	return nil
 }
 
